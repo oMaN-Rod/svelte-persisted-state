@@ -68,6 +68,11 @@ function toggleTheme() {
     };
 }
 
+// This is also valid
+function toggleTheme() {
+    userPreferences.value.theme = userPreferences.value.theme === 'light' ? 'dark' : 'light'
+}
+
 // Using $derived for reactive computations
 const theme = $derived(userPreferences.value.theme);
 
@@ -98,7 +103,7 @@ The `persistedState` function returns an object with the following properties:
 - `value`: Get or set the current state value.
 - `reset()`: Reset the state to its initial value.
 
-## Example with Svelte 5 Component
+## Examples with Svelte 5 Components
 
 ```svelte
 <script lang="ts">
@@ -145,6 +150,35 @@ The `persistedState` function returns an object with the following properties:
     </button>
     <button onclick={decreaseFontSize}> Decrease font size </button>
     <button onclick={increaseFontSize}> Increase font size </button>
+    <p>Current theme: {theme}</p>
+    <p>Current font size: {fontSize}px</p>
+</div>
+```
+
+```svelte
+<script lang="ts">
+    import { persistedState } from 'svelte-persisted-state';
+
+    interface UserPreferences {
+        theme: 'light' | 'dark';
+        fontSize: number;
+    }
+
+    const preferences = persistedState<UserPreferences>('preferences', {
+        theme: 'light',
+        fontSize: 16
+    });
+
+    const theme = $derived(preferences.value.theme);
+    const fontSize = $derived(preferences.value.fontSize);
+</script>
+
+<div style="font-size: {fontSize}px">
+    <button onclick={() => (preferences.value.theme = theme === 'light' ? 'dark' : 'light')}>
+        Switch to {theme === 'light' ? 'dark' : 'light'} theme
+    </button>
+    <button onclick={() => (preferences.value.fontSize = fontSize - 1)}> Decrease font size </button>
+    <button onclick={() => (preferences.value.fontSize = fontSize + 1)}> Increase font size </button>
     <p>Current theme: {theme}</p>
     <p>Current font size: {fontSize}px</p>
 </div>
