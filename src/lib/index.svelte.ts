@@ -76,10 +76,22 @@ export function persistedState<T>(key: string, initialValue: T, options: Options
 	});
 
 	return {
+		/**
+		 * @deprecated Use current to align with Svelte conventions
+		 */
 		get value() {
 			return state;
 		},
+		/**
+		 * @deprecated Use current to align with Svelte conventions
+		 */
 		set value(newValue: T) {
+			state = newValue;
+		},
+		get current() {
+			return state;
+		},
+		set current(newValue: T) {
 			state = newValue;
 		},
 		reset() {
