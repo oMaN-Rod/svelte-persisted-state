@@ -3,7 +3,7 @@ type Serializer<T> = {
 	stringify: (object: T) => string;
 };
 
-type StorageType = 'local' | 'session';
+type StorageType = 'local' | 'session' | 'cookie';
 
 interface Options<T> {
 	storage?: StorageType;
@@ -15,8 +15,32 @@ interface Options<T> {
 	beforeWrite?: (value: T) => T;
 }
 
+function getCookie(name: string): string | null {
+	const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+	return match ? decodeURIComponent(match[2]) : null;
+}
+
+function setCookie(name: string, value: string, days = 365) {
+	const expires = new Date(Date.now() + days * 864e5).toUTCString();
+	document.cookie = `${name}=${encodeURIComponent(value)}; path=/; expires=${expires}`;
+}
+
 function getStorage(type: StorageType) {
-	return type === 'local' ? localStorage : sessionStorage;
+	if (type === 'local')
+		return {
+			getItem: (k: string) => localStorage.getItem(k),
+			setItem: (k: string, v: string) => localStorage.setItem(k, v)
+		};
+	if (type === 'session')
+		return {
+			getItem: (k: string) => sessionStorage.getItem(k),
+			setItem: (k: string, v: string) => sessionStorage.setItem(k, v)
+		};
+	// cookie
+	return {
+		getItem: getCookie,
+		setItem: setCookie
+	};
 }
 
 export function persistedState<T>(key: string, initialValue: T, options: Options<T> = {}) {
