@@ -9,13 +9,32 @@ async function waitForNextTick() {
 	await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function clearAllCookies() {
+	// Clear all cookies by setting their expiration date in the past
+	document.cookie
+		.split(';')
+		.forEach((cookie) => {
+			const [name] = cookie.split('=');
+			document.cookie = `${name.trim()}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+		});
+}
+
+function getCookieValue(name: string): string | null {
+	const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+	return match ? decodeURIComponent(match[2]) : null;
+}
+
 describe('persistedState', () => {
 	beforeEach(() => {
 		localStorage.clear();
+		sessionStorage.clear();
+		clearAllCookies();
 	});
 
 	afterEach(() => {
 		localStorage.clear();
+		sessionStorage.clear();
+		clearAllCookies();
 	});
 
 	it('should initialize with the initial value when no stored value exists', () => {
@@ -181,5 +200,64 @@ describe('persistedState', () => {
 		await waitForNextTick();
 
 		expect(state.value).toBe('initialValue');
+	});
+
+	// ---- Cookie-specific tests ----
+
+	it('should initialize with the initial value when no cookie exists', () => {
+		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie' });
+
+		expect(state.value).toBe('cookieInitial');
+	});
+
+	it('should use the stored cookie value when it exists', () => {
+		// Simulate a cookie storing a JSON string: '"cookieStored"'
+		document.cookie = `cookieKey=${encodeURIComponent('"cookieStored"')};path=/`;
+		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie' });
+
+		expect(state.value).toBe('cookieStored');
+	});
+
+	it('should update the cookie when the value changes', async () => {
+		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie' });
+
+		state.value = 'cookieNew';
+		await waitForNextTick();
+
+		const raw = getCookieValue('cookieKey');
+		expect(raw).not.toBeNull();
+		// raw is the JSON string '"cookieNew"'
+		expect(JSON.parse(raw!)).toBe('cookieNew');
+	});
+
+	it('should reset cookie to the initial value', async () => {
+		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie' });
+
+		state.value = 'cookieNew';
+		state.reset();
+		await waitForNextTick();
+
+		expect(state.value).toBe('cookieInitial');
+		const raw = getCookieValue('cookieKey');
+		expect(raw).not.toBeNull();
+		expect(JSON.parse(raw!)).toBe('cookieInitial');
+	});
+
+	it('should not sync across tabs for cookies even if syncTabs is true', async () => {
+		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie', syncTabs: true });
+		await waitForNextTick();
+
+		// Simulate storage event (which cookies do not trigger)
+		const storageEvent = new StorageEvent('storage', {
+			key: 'cookieKey',
+			newValue: JSON.stringify('cookieUpdated'),
+			storageArea: localStorage
+		});
+		window.dispatchEvent(storageEvent);
+
+		await waitForNextTick();
+
+		// Value should remain unchanged because cookies don't use storage events
+		expect(state.value).toBe('cookieInitial');
 	});
 });
