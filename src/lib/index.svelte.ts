@@ -9,6 +9,7 @@ interface Options<T> {
 	storage?: StorageType;
 	serializer?: Serializer<T>;
 	syncTabs?: boolean;
+	cookieExpireDays?: number;
 	onWriteError?: (error: unknown) => void;
 	onParseError?: (error: unknown) => void;
 	beforeRead?: (value: T) => T;
@@ -25,7 +26,7 @@ function setCookie(name: string, value: string, days = 365) {
 	document.cookie = `${name}=${encodeURIComponent(value)}; path=/; expires=${expires}`;
 }
 
-function getStorage(type: StorageType) {
+function getStorage(type: StorageType, cookieExpireDays: number = 365) {
 	if (type === 'local')
 		return {
 			getItem: (k: string) => localStorage.getItem(k),
@@ -39,7 +40,7 @@ function getStorage(type: StorageType) {
 	// cookie
 	return {
 		getItem: getCookie,
-		setItem: setCookie
+		setItem: (k: string, v: string) => setCookie(k, v, cookieExpireDays)
 	};
 }
 
@@ -48,6 +49,7 @@ export function persistedState<T>(key: string, initialValue: T, options: Options
 		storage = 'local',
 		serializer = JSON,
 		syncTabs = true,
+		cookieExpireDays = 365,
 		onWriteError = console.error,
 		onParseError = console.error,
 		beforeRead = (v: T) => v,
@@ -55,7 +57,7 @@ export function persistedState<T>(key: string, initialValue: T, options: Options
 	} = options;
 
 	const browser = typeof window !== 'undefined' && typeof document !== 'undefined';
-	const storageArea = browser ? getStorage(storage) : null;
+	const storageArea = browser ? getStorage(storage, cookieExpireDays) : null;
 
 	let storedValue: T;
 
