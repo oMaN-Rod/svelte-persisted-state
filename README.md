@@ -14,16 +14,17 @@ npm install svelte-persisted-state
 
 ## API
 
-The `persistedState` function creates a persisted state that automatically syncs with local or session storage.
+The `persistedState` function creates a persisted state that automatically syncs with local storage, session storage, or browser cookies.
 
 ### Parameters
 
 - `key`: A string key used for storage.
 - `initialValue`: The initial value of the state.
 - `options`: An optional object with the following properties:
-  - `storage`: 'local' (default) or 'session'
-  - `serializer`: Custom serializer object with `parse` and `stringify` methods
-  - `syncTabs`: Boolean to sync state across tabs (default: true)
+  - `storage`: 'local' (default), 'session', or 'cookie'
+  - `serializer`: Custom serializer object with `parse` and `stringify` methods (default: JSON)
+  - `syncTabs`: Boolean to sync state across tabs (default: true, only works with localStorage)
+  - `cookieExpireDays`: Number of days before cookie expires (default: 365, only applies when storage is 'cookie')
   - `onWriteError`: Function to handle write errors
   - `onParseError`: Function to handle parse errors
   - `beforeRead`: Function to process value before reading
@@ -102,7 +103,78 @@ const theme = $derived(userPreferences.current.theme);
 // The UI will automatically update when the state changes
 ```
 
-## Example
+### Cookie Storage
+
+You can use cookies for storage, which is useful for server-side rendering scenarios or when you need data to persist across different subdomains:
+
+```typescript
+import { persistedState } from 'svelte-persisted-state';
+
+// Basic cookie usage (expires after 365 days by default)
+const cookieState = persistedState('myCookieKey', 'defaultValue', {
+	storage: 'cookie'
+});
+
+// Custom cookie expiration (expires after 30 days)
+const shortTermCookie = persistedState(
+	'tempData',
+	{ userId: null },
+	{
+		storage: 'cookie',
+		cookieExpireDays: 30
+	}
+);
+
+// Long-term cookie (expires after 2 years)
+const longTermPrefs = persistedState(
+	'userPreferences',
+	{ theme: 'light' },
+	{
+		storage: 'cookie',
+		cookieExpireDays: 730
+	}
+);
+```
+
+**Important Notes about Cookie Storage:**
+
+- Cookies have a size limit (typically 4KB per cookie)
+- `syncTabs` option doesn't work with cookies (cookies don't trigger storage events)
+- Cookies are sent with every HTTP request to your domain
+- Cookie expiration can be customized with the `cookieExpireDays` option
+
+### Storage Comparison
+
+| Feature            | localStorage                | sessionStorage          | cookies                  |
+| ------------------ | --------------------------- | ----------------------- | ------------------------ |
+| **Persistence**    | Until manually cleared      | Until tab/window closes | Until expiration date    |
+| **Size Limit**     | ~5-10MB                     | ~5-10MB                 | ~4KB                     |
+| **Server Access**  | No                          | No                      | Yes (sent with requests) |
+| **Tab Sync**       | Yes (with `syncTabs: true`) | No                      | No                       |
+| **SSR Compatible** | No                          | No                      | Yes                      |
+| **Expiration**     | Manual                      | Automatic               | Configurable             |
+
+## Examples
+
+### Different Storage Types
+
+```typescript
+// localStorage (default)
+const localState = persistedState('local-key', 'value');
+
+// sessionStorage
+const sessionState = persistedState('session-key', 'value', {
+	storage: 'session'
+});
+
+// Cookies with custom expiration
+const cookieState = persistedState('cookie-key', 'value', {
+	storage: 'cookie',
+	cookieExpireDays: 7
+});
+```
+
+### Complete Example
 
 ```svelte
 <script lang="ts">
@@ -131,6 +203,50 @@ const theme = $derived(userPreferences.current.theme);
 	<p>Current theme: {theme}</p>
 	<p>Current font size: {fontSize}px</p>
 </div>
+```
+
+### Cookie Storage Example
+
+```svelte
+<script lang="ts">
+	import { persistedState } from 'svelte-persisted-state';
+
+	// User session data stored in cookies (expires in 30 days)
+	const userSession = persistedState(
+		'user-session',
+		{
+			isLoggedIn: false,
+			username: ''
+		},
+		{
+			storage: 'cookie',
+			cookieExpireDays: 30
+		}
+	);
+
+	// Shopping cart stored in cookies (expires in 7 days)
+	const cart = persistedState('shopping-cart', [], {
+		storage: 'cookie',
+		cookieExpireDays: 7
+	});
+
+	function login(username: string) {
+		userSession.current = { isLoggedIn: true, username };
+	}
+
+	function logout() {
+		userSession.current = { isLoggedIn: false, username: '' };
+	}
+</script>
+
+{#if userSession.current.isLoggedIn}
+	<p>Welcome back, {userSession.current.username}!</p>
+	<button onclick={logout}>Logout</button>
+{:else}
+	<button onclick={() => login('demo-user')}>Login as Demo User</button>
+{/if}
+
+<p>Cart items: {cart.current.length}</p>
 ```
 
 ## License
