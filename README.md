@@ -143,6 +143,14 @@ const longTermPrefs = persistedState(
 - Cookies are sent with every HTTP request to your domain
 - Cookie expiration can be customized with the `cookieExpireDays` option
 
+#### Browser Limitations
+
+**Important:** Modern browsers enforce a maximum cookie expiration limit:
+
+- **Chrome (since August 2022)** and other modern browsers cap cookie expiration at **400 days maximum**
+- Cookies requesting longer expiration are automatically reduced to 400 days
+- This limit is part of the updated HTTP cookie specification (RFC 6265bis)
+
 ### Storage Comparison
 
 | Feature            | localStorage                | sessionStorage          | cookies                  |
