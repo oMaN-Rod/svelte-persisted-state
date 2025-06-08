@@ -11,12 +11,10 @@ async function waitForNextTick() {
 
 function clearAllCookies() {
 	// Clear all cookies by setting their expiration date in the past
-	document.cookie
-		.split(';')
-		.forEach((cookie) => {
-			const [name] = cookie.split('=');
-			document.cookie = `${name.trim()}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-		});
+	document.cookie.split(';').forEach((cookie) => {
+		const [name] = cookie.split('=');
+		document.cookie = `${name.trim()}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+	});
 }
 
 function getCookieValue(name: string): string | null {
@@ -40,33 +38,33 @@ describe('persistedState', () => {
 	it('should initialize with the initial value when no stored value exists', () => {
 		const state = persistedState<string>('testKey', 'initialValue');
 
-		expect(state.value).toBe('initialValue');
+		expect(state.current).toBe('initialValue');
 	});
 
 	it('should use the stored value when it exists', () => {
 		localStorage.setItem('testKey', JSON.stringify('storedValue'));
 		const state = persistedState<string>('testKey', 'initialValue');
 
-		expect(state.value).toBe('storedValue');
+		expect(state.current).toBe('storedValue');
 	});
 
 	it('should update the storage when the value changes', async () => {
 		const state = persistedState<string>('testKey', 'initialValue');
 
-		state.value = 'newValue';
+		state.current = 'newValue';
 		await waitForNextTick();
 
-		expect(localStorage.getItem("testKey")).toBe('"newValue"');
+		expect(localStorage.getItem('testKey')).toBe('"newValue"');
 	});
 
 	it('should reset to the initial value', async () => {
 		const state = persistedState<string>('testKey', 'initialValue');
 
-		state.value = 'newValue';
+		state.current = 'newValue';
 		state.reset();
 		await waitForNextTick();
 
-		expect(state.value).toBe('initialValue');
+		expect(state.current).toBe('initialValue');
 		expect(JSON.parse(localStorage.getItem('testKey') || '')).toBe('initialValue');
 	});
 
@@ -74,7 +72,7 @@ describe('persistedState', () => {
 		const setItemSpy = vi.spyOn(Object.getPrototypeOf(window.sessionStorage), 'setItem');
 		const state = persistedState<string>('testKey', 'initialValue', { storage: 'session' });
 
-		state.value = 'newValue';
+		state.current = 'newValue';
 		await waitForNextTick();
 
 		expect(setItemSpy).toHaveBeenCalled();
@@ -99,7 +97,7 @@ describe('persistedState', () => {
 
 		expect(customSerializer.parse).toHaveBeenCalled();
 
-		state.value = { count: 10 };
+		state.current = { count: 10 };
 		await waitForNextTick();
 
 		expect(customSerializer.stringify).toHaveBeenCalled();
@@ -114,7 +112,7 @@ describe('persistedState', () => {
 		await waitForNextTick();
 
 		expect(onParseError).toHaveBeenCalled();
-		expect(state.value).toBe('initialValue');
+		expect(state.current).toBe('initialValue');
 	});
 
 	it('should handle write errors', async () => {
@@ -131,7 +129,7 @@ describe('persistedState', () => {
 		vi.spyOn(window, 'localStorage', 'get').mockReturnValue(mockStorageArea as any);
 
 		const state = persistedState<string>('testKey', 'initialValue', { onWriteError });
-		state.value = 'newValue';
+		state.current = 'newValue';
 		await waitForNextTick();
 
 		expect(onWriteError).toHaveBeenCalled();
@@ -152,7 +150,7 @@ describe('persistedState', () => {
 		);
 		await waitForNextTick();
 
-		expect(state.value).toEqual({ count: 10 });
+		expect(state.current).toEqual({ count: 10 });
 	});
 
 	it('should apply beforeWrite transformation', async () => {
@@ -164,7 +162,7 @@ describe('persistedState', () => {
 			}
 		);
 
-		state.value = { count: 5 };
+		state.current = { count: 5 };
 		await waitForNextTick();
 
 		expect(JSON.parse(localStorage.getItem('testKey') || '')).toEqual({ count: 10 });
@@ -183,7 +181,7 @@ describe('persistedState', () => {
 
 		await waitForNextTick();
 
-		expect(state.value).toBe('updatedValue');
+		expect(state.current).toBe('updatedValue');
 	});
 
 	it('should not sync across tabs when syncTabs is false', async () => {
@@ -199,7 +197,7 @@ describe('persistedState', () => {
 
 		await waitForNextTick();
 
-		expect(state.value).toBe('initialValue');
+		expect(state.current).toBe('initialValue');
 	});
 
 	// ---- Cookie-specific tests ----
@@ -207,7 +205,7 @@ describe('persistedState', () => {
 	it('should initialize with the initial value when no cookie exists', () => {
 		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie' });
 
-		expect(state.value).toBe('cookieInitial');
+		expect(state.current).toBe('cookieInitial');
 	});
 
 	it('should use the stored cookie value when it exists', () => {
@@ -215,13 +213,13 @@ describe('persistedState', () => {
 		document.cookie = `cookieKey=${encodeURIComponent('"cookieStored"')};path=/`;
 		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie' });
 
-		expect(state.value).toBe('cookieStored');
+		expect(state.current).toBe('cookieStored');
 	});
 
 	it('should update the cookie when the value changes', async () => {
 		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie' });
 
-		state.value = 'cookieNew';
+		state.current = 'cookieNew';
 		await waitForNextTick();
 
 		const raw = getCookieValue('cookieKey');
@@ -233,18 +231,21 @@ describe('persistedState', () => {
 	it('should reset cookie to the initial value', async () => {
 		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie' });
 
-		state.value = 'cookieNew';
+		state.current = 'cookieNew';
 		state.reset();
 		await waitForNextTick();
 
-		expect(state.value).toBe('cookieInitial');
+		expect(state.current).toBe('cookieInitial');
 		const raw = getCookieValue('cookieKey');
 		expect(raw).not.toBeNull();
 		expect(JSON.parse(raw!)).toBe('cookieInitial');
 	});
 
 	it('should not sync across tabs for cookies even if syncTabs is true', async () => {
-		const state = persistedState<string>('cookieKey', 'cookieInitial', { storage: 'cookie', syncTabs: true });
+		const state = persistedState<string>('cookieKey', 'cookieInitial', {
+			storage: 'cookie',
+			syncTabs: true
+		});
 		await waitForNextTick();
 
 		// Simulate storage event (which cookies do not trigger)
@@ -258,6 +259,6 @@ describe('persistedState', () => {
 		await waitForNextTick();
 
 		// Value should remain unchanged because cookies don't use storage events
-		expect(state.value).toBe('cookieInitial');
+		expect(state.current).toBe('cookieInitial');
 	});
 });
