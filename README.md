@@ -24,7 +24,14 @@ The `persistedState` function creates a persisted state that automatically syncs
   - `storage`: 'local' (default), 'session', or 'cookie'
   - `serializer`: Custom serializer object with `parse` and `stringify` methods (default: JSON)
   - `syncTabs`: Boolean to sync state across tabs (default: true, only works with localStorage)
-  - `cookieExpireDays`: Number of days before cookie expires (default: 365, only applies when storage is 'cookie')
+  - `cookieOptions`: Cookie-specific configuration object (only applies when storage is 'cookie'):
+    - `expireDays`: Number of days before cookie expires (default: 365, max: 400 due to browser limits)
+    - `maxAge`: Max-Age in seconds (takes precedence over expireDays if both are specified)
+    - `path`: Cookie path (default: '/')
+    - `domain`: Cookie domain (default: current domain)
+    - `secure`: Secure flag - cookie only sent over HTTPS (default: false)
+    - `sameSite`: SameSite attribute for CSRF protection - 'Strict' | 'Lax' | 'None' (default: 'Lax')
+    - `httpOnly`: HttpOnly flag - prevents client-side script access (default: false)
   - `onWriteError`: Function to handle write errors
   - `onParseError`: Function to handle parse errors
   - `beforeRead`: Function to process value before reading
@@ -125,7 +132,7 @@ const shortTermCookie = persistedState(
 	}
 );
 
-// Long-term cookie (expires after 2 years)
+// Long-term cookie (expires after 2 years, most browsers limit to 400 days)
 const longTermPrefs = persistedState(
 	'userPreferences',
 	{ theme: 'light' },
@@ -174,11 +181,73 @@ const localState = persistedState('local-key', 'value');
 const sessionState = persistedState('session-key', 'value', {
 	storage: 'session'
 });
+```
 
-// Cookies with custom expiration
-const cookieState = persistedState('cookie-key', 'value', {
+### Cookie Configuration
+
+```typescript
+// Authentication cookie with security options
+const authToken = persistedState('auth-token', null, {
 	storage: 'cookie',
-	cookieExpireDays: 7
+	cookieOptions: {
+		expireDays: 7, // Weekly re-authentication
+		secure: true, // Only send over HTTPS
+		sameSite: 'Strict', // Maximum CSRF protection
+		path: '/' // Available site-wide
+	}
+});
+
+// User preferences with balanced security
+const userPreferences = persistedState('user-prefs', defaultPrefs, {
+	storage: 'cookie',
+	cookieOptions: {
+		expireDays: 90, // Quarterly preference reset
+		secure: true, // HTTPS only
+		sameSite: 'Lax', // Balance security and usability
+		path: '/' // Available site-wide
+	}
+});
+
+// Shopping cart for specific site section
+const shoppingCart = persistedState('cart', [], {
+	storage: 'cookie',
+	cookieOptions: {
+		expireDays: 14, // Two-week shopping consideration
+		path: '/shop', // Only available in shop section
+		secure: true, // HTTPS only
+		sameSite: 'Lax'
+	}
+});
+
+// Cross-subdomain application state
+const globalState = persistedState('global-user', userData, {
+	storage: 'cookie',
+	cookieOptions: {
+		expireDays: 30,
+		domain: '.example.com', // Available across all subdomains
+		secure: true, // HTTPS only
+		sameSite: 'None', // Required for cross-site cookies
+		path: '/'
+	}
+});
+
+// Using max-age
+const maxAgeCookie = persistedState('session-data', sessionData, {
+	storage: 'cookie',
+	cookieOptions: {
+		maxAge: 3600, // 1 hour in seconds
+		secure: true,
+		sameSite: 'Strict',
+		path: '/'
+	}
+});
+
+// Using expires (expireDays)
+const expiresCookie = persistedState('data1', value, {
+	storage: 'cookie',
+	cookieOptions: {
+		expireDays: 30
+	}
 });
 ```
 
