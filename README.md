@@ -128,7 +128,9 @@ const shortTermCookie = persistedState(
 	{ userId: null },
 	{
 		storage: 'cookie',
-		cookieExpireDays: 30
+		cookieOptions: {
+			expireDays: 30
+		}
 	}
 );
 
@@ -138,7 +140,9 @@ const longTermPrefs = persistedState(
 	{ theme: 'light' },
 	{
 		storage: 'cookie',
-		cookieExpireDays: 730
+		cookieOptions: {
+			expireDays: 730
+		}
 	}
 );
 ```
@@ -148,7 +152,7 @@ const longTermPrefs = persistedState(
 - Cookies have a size limit (typically 4KB per cookie)
 - `syncTabs` option doesn't work with cookies (cookies don't trigger storage events)
 - Cookies are sent with every HTTP request to your domain
-- Cookie expiration can be customized with the `cookieExpireDays` option
+- Cookie expiration can be customized with the `cookieOptions.expireDays` option
 
 #### Browser Limitations
 
@@ -287,7 +291,6 @@ const expiresCookie = persistedState('data1', value, {
 ```svelte
 <script lang="ts">
 	import { persistedState } from 'svelte-persisted-state';
-
 	// User session data stored in cookies (expires in 30 days)
 	const userSession = persistedState(
 		'user-session',
@@ -297,14 +300,18 @@ const expiresCookie = persistedState('data1', value, {
 		},
 		{
 			storage: 'cookie',
-			cookieExpireDays: 30
+			cookieOptions: {
+				expireDays: 30
+			}
 		}
 	);
 
 	// Shopping cart stored in cookies (expires in 7 days)
 	const cart = persistedState('shopping-cart', [], {
 		storage: 'cookie',
-		cookieExpireDays: 7
+		cookieOptions: {
+			expireDays: 7
+		}
 	});
 
 	function login(username: string) {
