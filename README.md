@@ -92,14 +92,6 @@ const userPreferences = persistedState<UserPreferences>(
 	}
 );
 
-// Set a new value
-function toggleTheme() {
-	userPreferences.current = {
-		...userPreferences.current,
-		theme: userPreferences.current.theme === 'light' ? 'dark' : 'light'
-	};
-}
-
 function toggleTheme() {
 	userPreferences.current.theme = userPreferences.current.theme === 'light' ? 'dark' : 'light';
 }
@@ -110,57 +102,73 @@ const theme = $derived(userPreferences.current.theme);
 // The UI will automatically update when the state changes
 ```
 
+### Custom serialization for complex objects (Maps, Sets, Dates)
+
+JSON can’t natively serialize objects like Map, Set, Date, BigInt, or circular references. To persist such values, pass a custom serializer. A simple and reliable option is devalue.
+
+Install devalue:
+
+```bash
+npm install devalue
+```
+
+Use it as the serializer:
+
+```typescript
+import { persistedState } from 'svelte-persisted-state';
+import * as devalue from 'devalue';
+
+const devalueSerializer = {
+	stringify: devalue.stringify,
+	parse: devalue.parse
+};
+
+// Works with Maps, Sets, Dates, nested structures, etc.
+export const complexData = persistedState(
+	'complexData',
+	{
+		name: 'Example',
+		created: new Date(),
+		nested: {
+			array: [1, 2, 3],
+			map: new Map([
+				['key1', 'value1'],
+				['key2', 'value2']
+			]),
+			set: new Set([1, 2, 3])
+		}
+	},
+	{
+		serializer: devalueSerializer
+	}
+);
+
+// Tip: if you mutate a Map/Set in-place, reassign to trigger reactivity:
+// complexData.current.nested.map.set('key3', 'value3');
+// complexData.current = { ...complexData.current };
+```
+
 ### Cookie Storage
 
-You can use cookies for storage, which is useful for server-side rendering scenarios or when you need data to persist across different subdomains:
+You can use cookies for storage, which is useful for SSR scenarios or when you need data to persist across subdomains:
 
 ```typescript
 import { persistedState } from 'svelte-persisted-state';
 
-// Basic cookie usage (expires after 365 days by default)
 const cookieState = persistedState('myCookieKey', 'defaultValue', {
-	storage: 'cookie'
+	storage: 'cookie',
+	cookieOptions: {
+		expireDays: 30 // Custom expiration
+	}
 });
-
-// Custom cookie expiration (expires after 30 days)
-const shortTermCookie = persistedState(
-	'tempData',
-	{ userId: null },
-	{
-		storage: 'cookie',
-		cookieOptions: {
-			expireDays: 30
-		}
-	}
-);
-
-// Long-term cookie (expires after 2 years, most browsers limit to 400 days)
-const longTermPrefs = persistedState(
-	'userPreferences',
-	{ theme: 'light' },
-	{
-		storage: 'cookie',
-		cookieOptions: {
-			expireDays: 730
-		}
-	}
-);
 ```
 
-**Important Notes about Cookie Storage:**
+Notes:
 
-- Cookies have a size limit (typically 4KB per cookie)
-- `syncTabs` option doesn't work with cookies (cookies don't trigger storage events)
-- Cookies are sent with every HTTP request to your domain
-- Cookie expiration can be customized with the `cookieOptions.expireDays` option
-
-#### Browser Limitations
-
-**Important:** Modern browsers enforce a maximum cookie expiration limit:
-
-- **Chrome (since August 2022)** and other modern browsers cap cookie expiration at **400 days maximum**
-- Cookies requesting longer expiration are automatically reduced to 400 days
-- This limit is part of the updated HTTP cookie specification (RFC 6265bis)
+- Cookies have a size limit (~4KB per cookie)
+- `syncTabs` doesn’t work with cookies
+- Cookies are sent with every HTTP request
+- Modern browsers cap expiration at about 400 days
 
 ### Storage Comparison
 
@@ -174,86 +182,6 @@ const longTermPrefs = persistedState(
 | **Expiration**     | Manual                      | Automatic               | Configurable             |
 
 ## Examples
-
-### Different Storage Types
-
-```typescript
-// localStorage (default)
-const localState = persistedState('local-key', 'value');
-
-// sessionStorage
-const sessionState = persistedState('session-key', 'value', {
-	storage: 'session'
-});
-```
-
-### Cookie Configuration
-
-```typescript
-// Authentication cookie with security options
-const authToken = persistedState('auth-token', null, {
-	storage: 'cookie',
-	cookieOptions: {
-		expireDays: 7, // Weekly re-authentication
-		secure: true, // Only send over HTTPS
-		sameSite: 'Strict', // Maximum CSRF protection
-		path: '/' // Available site-wide
-	}
-});
-
-// User preferences with balanced security
-const userPreferences = persistedState('user-prefs', defaultPrefs, {
-	storage: 'cookie',
-	cookieOptions: {
-		expireDays: 90, // Quarterly preference reset
-		secure: true, // HTTPS only
-		sameSite: 'Lax', // Balance security and usability
-		path: '/' // Available site-wide
-	}
-});
-
-// Shopping cart for specific site section
-const shoppingCart = persistedState('cart', [], {
-	storage: 'cookie',
-	cookieOptions: {
-		expireDays: 14, // Two-week shopping consideration
-		path: '/shop', // Only available in shop section
-		secure: true, // HTTPS only
-		sameSite: 'Lax'
-	}
-});
-
-// Cross-subdomain application state
-const globalState = persistedState('global-user', userData, {
-	storage: 'cookie',
-	cookieOptions: {
-		expireDays: 30,
-		domain: '.example.com', // Available across all subdomains
-		secure: true, // HTTPS only
-		sameSite: 'None', // Required for cross-site cookies
-		path: '/'
-	}
-});
-
-// Using max-age
-const maxAgeCookie = persistedState('session-data', sessionData, {
-	storage: 'cookie',
-	cookieOptions: {
-		maxAge: 3600, // 1 hour in seconds
-		secure: true,
-		sameSite: 'Strict',
-		path: '/'
-	}
-});
-
-// Using expires (expireDays)
-const expiresCookie = persistedState('data1', value, {
-	storage: 'cookie',
-	cookieOptions: {
-		expireDays: 30
-	}
-});
-```
 
 ### Complete Example
 
