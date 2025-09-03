@@ -104,7 +104,7 @@ const theme = $derived(userPreferences.current.theme);
 
 ### Custom serialization for complex objects (Maps, Sets, Dates)
 
-JSON can’t natively serialize objects like Map, Set, Date, BigInt, or circular references. To persist such values, pass a custom serializer. A simple and reliable option is devalue.
+JSON can't natively serialize objects like Map, Set, Date, BigInt, or circular references. To persist such values, pass a custom serializer. A simple and reliable option is [devalue](https://github.com/sveltejs/devalue).
 
 Install devalue:
 
