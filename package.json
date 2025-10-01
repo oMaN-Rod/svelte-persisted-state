@@ -35,7 +35,7 @@
     "@types/eslint": "^9.6.1",
     "eslint": "^9.34.0",
     "eslint-config-prettier": "^9.1.2",
-    "eslint-plugin-svelte": "^2.46.1",
+    "eslint-plugin-svelte": "^3.12.4",
     "globals": "^15.15.0",
     "jsdom": "^25.0.1",
     "prettier": "^3.6.2",
