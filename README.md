@@ -14,6 +14,13 @@ npm install svelte-persisted-state
 
 ## API
 
+This package exports two functions:
+
+- `persistedState` - Synchronous storage (localStorage, sessionStorage, cookies)
+- `persistedStateAsync` - Asynchronous storage (IndexedDB) for large datasets
+
+### persistedState (Sync)
+
 The `persistedState` function creates a persisted state that automatically syncs with local storage, session storage, or browser cookies.
 
 ### Parameters
@@ -170,16 +177,137 @@ Notes:
 - Cookies are sent with every HTTP request
 - Modern browsers cap expiration at about 400 days
 
+### persistedStateAsync (Async)
+
+For large datasets (50MB+) or async usage, use `persistedStateAsync` with IndexedDB:
+
+```typescript
+import { persistedStateAsync } from 'svelte-persisted-state';
+
+const largeData = persistedStateAsync('large-dataset', [], {
+	indexedDB: {
+		dbName: 'my-app', // default: 'svelte-persisted-state'
+		storeName: 'state', // default: 'state'
+		version: 1 // default: 1
+	},
+	syncTabs: true, // Uses BroadcastChannel for cross-tab sync
+	onHydrated: (value) => console.log('Data loaded:', value.length)
+});
+```
+
+#### Parameters
+
+- `key`: A string key used for storage
+- `initialValue`: The initial value (returned immediately, before hydration)
+- `options`: An optional object with the following properties:
+  - `indexedDB`: IndexedDB configuration object:
+    - `dbName`: Database name (default: 'svelte-persisted-state')
+    - `storeName`: Object store name (default: 'state')
+    - `version`: Database version (default: 1)
+  - `serializer`: Custom serializer with `parse` and `stringify` methods (default: JSON)
+  - `syncTabs`: Boolean to sync state across tabs via BroadcastChannel (default: true)
+  - `onWriteError`: Function to handle write errors
+  - `onParseError`: Function to handle parse errors
+  - `onHydrated`: Callback when hydration completes with the loaded value
+  - `onHydrationError`: Function to handle hydration errors
+  - `beforeRead`: Function to process value before reading
+  - `beforeWrite`: Function to process value before writing
+
+#### Return Value
+
+`persistedStateAsync` returns immediately with the initial value and hydrates asynchronously in the background:
+
+```typescript
+interface AsyncPersistedState<T> {
+	current: T; // Get or set the current value (reactive)
+	isLoading: boolean; // True while hydrating from IndexedDB
+	ready: Promise<T>; // Resolves when hydration completes
+	reset(): void; // Reset to initial value
+}
+```
+
+#### Automatic Reactivity (Simplest Usage)
+
+Since `current` is reactive (`$state`), the UI automatically updates when hydration completes. **No loading state handling is required** if you're okay with the initial value showing briefly:
+
+```svelte
+<script lang="ts">
+	import { persistedStateAsync } from 'svelte-persisted-state';
+
+	const notes = persistedStateAsync('notes', []);
+</script>
+
+<!-- This automatically updates when data loads from IndexedDB -->
+<p>You have {notes.current.length} notes</p>
+
+{#each notes.current as note}
+	<div>{note.title}</div>
+{/each}
+
+<button onclick={() => notes.current = [...notes.current, { title: 'New' }]}>
+	Add Note
+</button>
+```
+
+#### Optional: Loading States
+
+If you want to show a loading indicator while hydrating, use `isLoading` or `{#await}`:
+
+```svelte
+<!-- Using isLoading -->
+{#if data.isLoading}
+	<Spinner />
+{:else}
+	<List items={data.current} />
+{/if}
+
+<!-- Using {#await} -->
+{#await data.ready}
+	<p>Loading...</p>
+{:then}
+	<List items={data.current} />
+{:catch error}
+	<p>Error: {error.message}</p>
+{/await}
+```
+
+#### Awaiting in JavaScript
+
+```typescript
+const data = persistedStateAsync('my-data', []);
+
+// Optionally wait for hydration
+await data.ready;
+console.log('Hydrated:', data.current);
+
+// Or capture the hydrated value directly
+const value = await data.ready;
+console.log('Hydrated:', value);
+```
+
+### Type Exports
+
+For TypeScript users, the following types are exported:
+
+```typescript
+import type {
+	AsyncOptions,
+	AsyncPersistedState,
+	IndexedDBOptions
+} from 'svelte-persisted-state';
+```
+
 ### Storage Comparison
 
-| Feature            | localStorage                | sessionStorage          | cookies                  |
-| ------------------ | --------------------------- | ----------------------- | ------------------------ |
-| **Persistence**    | Until manually cleared      | Until tab/window closes | Until expiration date    |
-| **Size Limit**     | ~5-10MB                     | ~5-10MB                 | ~4KB                     |
-| **Server Access**  | No                          | No                      | Yes (sent with requests) |
-| **Tab Sync**       | Yes (with `syncTabs: true`) | No                      | No                       |
-| **SSR Compatible** | No                          | No                      | Yes                      |
-| **Expiration**     | Manual                      | Automatic               | Configurable             |
+| Feature            | localStorage                | sessionStorage          | cookies                  | IndexedDB                  |
+| ------------------ | --------------------------- | ----------------------- | ------------------------ | -------------------------- |
+| **Persistence**    | Until manually cleared      | Until tab/window closes | Until expiration date    | Until manually cleared     |
+| **Size Limit**     | ~5-10MB                     | ~5-10MB                 | ~4KB                     | ~50MB+ (browser dependent) |
+| **API Type**       | Sync                        | Sync                    | Sync                     | Async                      |
+| **Server Access**  | No                          | No                      | Yes (sent with requests) | No                         |
+| **Tab Sync**       | Yes (with `syncTabs: true`) | No                      | No                       | Yes (via BroadcastChannel) |
+| **SSR Compatible** | No                          | No                      | Yes                      | No                         |
+| **Expiration**     | Manual                      | Automatic               | Configurable             | Manual                     |
 
 ## Examples
 

@@ -1,9 +1,18 @@
+import {
+	getItem as idbGetItem,
+	setItem as idbSetItem,
+	closeDB,
+	type IndexedDBOptions
+} from './indexeddb-storage.js';
+
 type Serializer<T> = {
 	parse: (text: string) => T;
 	stringify: (object: T) => string;
 };
 
 type StorageType = 'local' | 'session' | 'cookie';
+
+export type { IndexedDBOptions };
 
 interface CookieOptions {
 	expireDays?: number;
@@ -90,6 +99,26 @@ function getStorage(type: StorageType, cookieOptions: CookieOptions = {}) {
 	};
 }
 
+export interface AsyncOptions<T> {
+	indexedDB?: IndexedDBOptions;
+	serializer?: Serializer<T>;
+	syncTabs?: boolean;
+	onWriteError?: (error: unknown) => void;
+	onParseError?: (error: unknown) => void;
+	onHydrated?: (value: T) => void;
+	onHydrationError?: (error: unknown) => void;
+	beforeRead?: (value: T) => T;
+	beforeWrite?: (value: T) => T;
+}
+
+export interface AsyncPersistedState<T> {
+	get current(): T;
+	set current(newValue: T);
+	readonly isLoading: boolean;
+	readonly ready: Promise<T>;
+	reset(): void;
+}
+
 export function persistedState<T>(key: string, initialValue: T, options: Options<T> = {}) {
 	const {
 		storage = 'local',
@@ -151,7 +180,7 @@ export function persistedState<T>(key: string, initialValue: T, options: Options
 			updateStorage(state);
 		});
 
-		return () => {};
+		return () => { };
 	});
 
 	return {
@@ -172,6 +201,144 @@ export function persistedState<T>(key: string, initialValue: T, options: Options
 		},
 		set current(newValue: T) {
 			state = newValue;
+		},
+		reset() {
+			state = initialValue;
+		}
+	};
+}
+
+export function persistedStateAsync<T>(
+	key: string,
+	initialValue: T,
+	options: AsyncOptions<T> = {}
+): AsyncPersistedState<T> {
+	const {
+		indexedDB: indexedDBOptions = {},
+		serializer = JSON,
+		syncTabs = true,
+		onWriteError = console.error,
+		onParseError = console.error,
+		onHydrated,
+		onHydrationError = console.error,
+		beforeRead = (v: T) => v,
+		beforeWrite = (v: T) => v
+	} = options;
+
+	const browser = typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
+
+	let state = $state<T>(initialValue);
+	let isLoading = $state(browser);
+	let resolveReady: (value: T) => void;
+	let rejectReady: (error: unknown) => void;
+
+	const ready = new Promise<T>((resolve, reject) => {
+		resolveReady = resolve;
+		rejectReady = reject;
+	});
+
+	let broadcastChannel: BroadcastChannel | null = null;
+	let skipNextWrite = false;
+
+	async function hydrate() {
+		if (!browser) {
+			isLoading = false;
+			resolveReady(initialValue);
+			return;
+		}
+
+		try {
+			const storedValue = await idbGetItem<string>(key, indexedDBOptions);
+			if (storedValue !== null) {
+				try {
+					const parsed = serializer.parse(storedValue);
+					state = beforeRead(parsed);
+				} catch (error) {
+					onParseError(error);
+					state = initialValue;
+				}
+			}
+			isLoading = false;
+			onHydrated?.(state);
+			resolveReady(state);
+		} catch (error) {
+			onHydrationError(error);
+			isLoading = false;
+			rejectReady(error);
+		}
+	}
+
+	if (browser && syncTabs) {
+		const channelName = `svelte-persisted-state:${indexedDBOptions.dbName ?? 'svelte-persisted-state'}`;
+		broadcastChannel = new BroadcastChannel(channelName);
+
+		broadcastChannel.onmessage = (event) => {
+			if (event.data.key === key) {
+				try {
+					skipNextWrite = true;
+					const parsed = serializer.parse(event.data.value);
+					state = beforeRead(parsed);
+				} catch (error) {
+					skipNextWrite = false;
+					onParseError(error);
+				}
+			}
+		};
+	}
+
+	hydrate();
+
+	$effect.root(() => {
+		let isFirstRun = true;
+
+		$effect(() => {
+			let serialized: string;
+			try {
+				const valueToStore = beforeWrite(state);
+				serialized = serializer.stringify(valueToStore);
+			} catch (error) {
+				onWriteError(error);
+				return;
+			}
+
+			if (isFirstRun) {
+				isFirstRun = false;
+				return;
+			}
+			if (!isLoading && !skipNextWrite) {
+				idbSetItem(key, serialized, indexedDBOptions)
+					.then(() => {
+						if (syncTabs && broadcastChannel) {
+							broadcastChannel.postMessage({ key, value: serialized });
+						}
+					})
+					.catch(onWriteError);
+			}
+			if (skipNextWrite) {
+				skipNextWrite = false;
+			}
+		});
+
+		return () => {
+			broadcastChannel?.close();
+			if (browser) {
+				closeDB(indexedDBOptions);
+			}
+		};
+	});
+
+	return {
+		get current() {
+			return state;
+		},
+		set current(newValue: T) {
+			state = newValue;
+		},
+		get isLoading() {
+			return isLoading;
+		},
+		get ready() {
+			return ready;
 		},
 		reset() {
 			state = initialValue;

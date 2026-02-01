@@ -28,6 +28,9 @@
 
 <main class="container">
 	<h1>Svelte Persisted State Demo</h1>
+	<p class="demo-links">
+		<a href="/indexeddb">View IndexedDB Demo (Async Storage)</a>
+	</p>
 	<div class="section localStorage-section">
 		<h2>LocalStorage Demo</h2>
 		<p class="section-description">
@@ -99,9 +102,24 @@
 	h1 {
 		text-align: center;
 		color: #333;
-		margin-bottom: 2rem;
+		margin-bottom: 1rem;
 		border-bottom: 3px solid #202020;
 		padding-bottom: 1rem;
+	}
+
+	.demo-links {
+		text-align: center;
+		margin-bottom: 2rem;
+	}
+
+	.demo-links a {
+		color: #4caf50;
+		text-decoration: none;
+		font-weight: 500;
+	}
+
+	.demo-links a:hover {
+		text-decoration: underline;
 	}
 
 	.section {

@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^3.3.1",
+    "fake-indexeddb": "^6.0.0",
     "@sveltejs/kit": "^2.37.0",
     "@sveltejs/package": "^2.5.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.4",
