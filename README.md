@@ -195,6 +195,44 @@ const largeData = persistedStateAsync('large-dataset', [], {
 });
 ```
 
+#### Native Type Support (Structured Clone)
+
+Unlike `persistedState` which uses JSON serialization by default, `persistedStateAsync` uses IndexedDB's native [Structured Clone Algorithm](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm). This means you can store complex JavaScript types directly without a custom serializer:
+
+```typescript
+// Date, Map, Set, RegExp, TypedArrays work out of the box!
+const appState = persistedStateAsync('app-state', {
+	lastVisit: new Date(),
+	userTags: new Set(['svelte', 'typescript']),
+	preferences: new Map([
+		['theme', 'dark'],
+		['language', 'en']
+	]),
+	pattern: /search-\d+/gi,
+	buffer: new Uint8Array([1, 2, 3, 4])
+});
+
+// No serializer needed - values are stored natively
+await appState.ready;
+console.log(appState.current.lastVisit instanceof Date); // true
+console.log(appState.current.userTags instanceof Set); // true
+```
+
+**Benefits over JSON:**
+
+- Native support for `Date`, `Map`, `Set`, `RegExp`, `ArrayBuffer`, `TypedArray`, `Blob`, `File`
+- Handles circular references
+- No serialization/deserialization overhead
+- Better performance for large objects
+
+If you need JSON or custom serialization, you can opt-in:
+
+```typescript
+const legacyData = persistedStateAsync('legacy-key', {}, {
+	serializer: JSON // Opt-in to JSON (or custom) serialization
+});
+```
+
 #### Parameters
 
 - `key`: A string key used for storage
@@ -204,10 +242,10 @@ const largeData = persistedStateAsync('large-dataset', [], {
     - `dbName`: Database name (default: 'svelte-persisted-state')
     - `storeName`: Object store name (default: 'state')
     - `version`: Database version (default: 1)
-  - `serializer`: Custom serializer with `parse` and `stringify` methods (default: JSON)
+  - `serializer`: Custom serializer with `parse` and `stringify` methods (default: none, uses structured clone)
   - `syncTabs`: Boolean to sync state across tabs via BroadcastChannel (default: true)
   - `onWriteError`: Function to handle write errors
-  - `onParseError`: Function to handle parse errors
+  - `onParseError`: Function to handle parse errors (only applies when using a serializer)
   - `onHydrated`: Callback when hydration completes with the loaded value
   - `onHydrationError`: Function to handle hydration errors
   - `beforeRead`: Function to process value before reading

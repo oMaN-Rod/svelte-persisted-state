@@ -77,8 +77,7 @@ describe('IndexedDB Storage', () => {
 		});
 
 		it('should hydrate from stored value', async () => {
-			// Pre-populate storage
-			await setItem('testKey2', JSON.stringify('storedValue'));
+			await setItem('testKey2', 'storedValue');
 
 			const state = persistedStateAsync<string>('testKey2', 'initialValue');
 
@@ -100,7 +99,7 @@ describe('IndexedDB Storage', () => {
 			await waitForHydration();
 
 			const storedValue = await getItem<string>('testKey3');
-			expect(storedValue).toBe(JSON.stringify('newValue'));
+			expect(storedValue).toBe('newValue');
 		});
 
 		it('should reset to initial value', async () => {
@@ -118,7 +117,7 @@ describe('IndexedDB Storage', () => {
 		});
 
 		it('should call onHydrated callback', async () => {
-			await setItem('testKey5', JSON.stringify({ count: 42 }));
+			await setItem('testKey5', { count: 42 });
 
 			const onHydrated = vi.fn();
 			const state = persistedStateAsync<TestState>('testKey5', { count: 0 }, {
@@ -130,11 +129,12 @@ describe('IndexedDB Storage', () => {
 			expect(onHydrated).toHaveBeenCalledWith({ count: 42 });
 		});
 
-		it('should handle parse errors gracefully', async () => {
+		it('should handle parse errors gracefully with custom serializer', async () => {
 			await setItem('testKey6', 'invalid JSON{{{');
 
 			const onParseError = vi.fn();
 			const state = persistedStateAsync<string>('testKey6', 'initialValue', {
+				serializer: JSON,
 				onParseError
 			});
 
@@ -145,7 +145,7 @@ describe('IndexedDB Storage', () => {
 		});
 
 		it('should apply beforeRead transformation', async () => {
-			await setItem('testKey7', JSON.stringify({ count: 5 }));
+			await setItem('testKey7', { count: 5 });
 
 			const state = persistedStateAsync<TestState>('testKey7', { count: 0 }, {
 				beforeRead: (v) => ({ count: v.count * 2 })
@@ -167,16 +167,17 @@ describe('IndexedDB Storage', () => {
 			await waitForNextTick();
 			await waitForHydration();
 
-			const storedValue = await getItem<string>('testKey8');
-			expect(JSON.parse(storedValue!)).toEqual({ count: 10 });
+			const storedValue = await getItem<TestState>('testKey8');
+			expect(storedValue).toEqual({ count: 10 });
 		});
 
-		it('should use custom serializer', async () => {
+		it('should use custom serializer when provided', async () => {
 			const customSerializer = {
 				parse: vi.fn((v: string) => JSON.parse(v)),
 				stringify: vi.fn((v: TestState) => JSON.stringify(v))
 			};
 
+			// When using a custom serializer, storage contains serialized strings
 			await setItem('testKey9', JSON.stringify({ count: 5 }));
 
 			const state = persistedStateAsync<TestState>('testKey9', { count: 0 }, {
@@ -186,17 +187,22 @@ describe('IndexedDB Storage', () => {
 			await state.ready;
 
 			expect(customSerializer.parse).toHaveBeenCalled();
+			expect(state.current).toEqual({ count: 5 });
 
 			state.current = { count: 10 };
 			await waitForNextTick();
 			await waitForHydration();
 
 			expect(customSerializer.stringify).toHaveBeenCalled();
+
+			// Verify stored as string
+			const storedValue = await getItem<string>('testKey9');
+			expect(storedValue).toBe(JSON.stringify({ count: 10 }));
 		});
 
 		it('should use custom IndexedDB options', async () => {
 			const options = { dbName: 'my-app', storeName: 'my-store', version: 1 };
-			await setItem('testKey10', JSON.stringify('storedValue'), options);
+			await setItem('testKey10', 'storedValue', options);
 
 			const state = persistedStateAsync<string>('testKey10', 'initialValue', {
 				indexedDB: options
@@ -229,7 +235,7 @@ describe('IndexedDB Storage', () => {
 		});
 
 		it('should resolve ready promise with hydrated value', async () => {
-			await setItem('testKey12', JSON.stringify({ count: 42 }));
+			await setItem('testKey12', { count: 42 });
 
 			const state = persistedStateAsync<TestState>('testKey12', { count: 0 });
 
@@ -247,7 +253,7 @@ describe('IndexedDB Storage', () => {
 		});
 
 		it('should work with await pattern for success case', async () => {
-			await setItem('awaitKey', JSON.stringify({ items: [1, 2, 3] }));
+			await setItem('awaitKey', { items: [1, 2, 3] });
 
 			const state = persistedStateAsync<{ items: number[] }>('awaitKey', { items: [] });
 
@@ -300,17 +306,18 @@ describe('IndexedDB Storage', () => {
 			expect(state2.current).toBe('initial');
 		});
 
-		it('should handle parse errors in broadcast messages', async () => {
+		it('should handle parse errors in broadcast messages with custom serializer', async () => {
 			const onParseError = vi.fn();
 
 			const state = persistedStateAsync<TestState>('broadcastKey', { count: 0 }, {
 				syncTabs: true,
+				serializer: JSON,
 				onParseError
 			});
 
 			await state.ready;
 
-			// Manually send invalid message
+			// Manually send invalid message (only causes parse error when serializer is used)
 			const channel = new BroadcastChannel('svelte-persisted-state:svelte-persisted-state');
 			channel.postMessage({ key: 'broadcastKey', value: 'invalid JSON{{{' });
 
@@ -361,6 +368,192 @@ describe('IndexedDB Storage', () => {
 			await waitForHydration();
 
 			expect(state2.current).toEqual({ count: 10 });
+		});
+	});
+
+	describe('structured clone support (native types)', () => {
+		it('should store and retrieve Date objects natively', async () => {
+			const testDate = new Date('2024-01-15T12:00:00.000Z');
+			await setItem('dateKey', testDate);
+
+			const state = persistedStateAsync<Date>('dateKey', new Date(0));
+
+			await state.ready;
+
+			expect(state.current).toBeInstanceOf(Date);
+			expect(state.current.getTime()).toBe(testDate.getTime());
+		});
+
+		it('should persist Date objects without serializer', async () => {
+			const testDate = new Date('2024-06-20T15:30:00.000Z');
+
+			const state = persistedStateAsync<Date>('dateKey2', new Date(0));
+
+			await state.ready;
+
+			state.current = testDate;
+			await waitForNextTick();
+			await waitForHydration();
+
+			const storedValue = await getItem<Date>('dateKey2');
+			expect(storedValue).toBeInstanceOf(Date);
+			expect(storedValue!.getTime()).toBe(testDate.getTime());
+		});
+
+		it('should store and retrieve Map objects natively', async () => {
+			const testMap = new Map([
+				['key1', 'value1'],
+				['key2', 'value2']
+			]);
+			await setItem('mapKey', testMap);
+
+			const state = persistedStateAsync<Map<string, string>>('mapKey', new Map());
+
+			await state.ready;
+
+			expect(state.current).toBeInstanceOf(Map);
+			expect(state.current.get('key1')).toBe('value1');
+			expect(state.current.get('key2')).toBe('value2');
+			expect(state.current.size).toBe(2);
+		});
+
+		it('should persist Map objects without serializer', async () => {
+			const state = persistedStateAsync<Map<string, number>>('mapKey2', new Map());
+
+			await state.ready;
+
+			state.current = new Map([
+				['a', 1],
+				['b', 2],
+				['c', 3]
+			]);
+			await waitForNextTick();
+			await waitForHydration();
+
+			const storedValue = await getItem<Map<string, number>>('mapKey2');
+			expect(storedValue).toBeInstanceOf(Map);
+			expect(storedValue!.get('a')).toBe(1);
+			expect(storedValue!.get('b')).toBe(2);
+			expect(storedValue!.get('c')).toBe(3);
+		});
+
+		it('should store and retrieve Set objects natively', async () => {
+			const testSet = new Set(['item1', 'item2', 'item3']);
+			await setItem('setKey', testSet);
+
+			const state = persistedStateAsync<Set<string>>('setKey', new Set());
+
+			await state.ready;
+
+			expect(state.current).toBeInstanceOf(Set);
+			expect(state.current.has('item1')).toBe(true);
+			expect(state.current.has('item2')).toBe(true);
+			expect(state.current.has('item3')).toBe(true);
+			expect(state.current.size).toBe(3);
+		});
+
+		it('should persist Set objects without serializer', async () => {
+			const state = persistedStateAsync<Set<number>>('setKey2', new Set());
+
+			await state.ready;
+
+			state.current = new Set([1, 2, 3, 4, 5]);
+			await waitForNextTick();
+			await waitForHydration();
+
+			const storedValue = await getItem<Set<number>>('setKey2');
+			expect(storedValue).toBeInstanceOf(Set);
+			expect(storedValue!.has(1)).toBe(true);
+			expect(storedValue!.has(5)).toBe(true);
+			expect(storedValue!.size).toBe(5);
+		});
+
+		it('should store and retrieve RegExp objects natively', async () => {
+			const testRegex = /hello\s+world/gi;
+			await setItem('regexKey', testRegex);
+
+			const state = persistedStateAsync<RegExp>('regexKey', /default/);
+
+			await state.ready;
+
+			expect(state.current).toBeInstanceOf(RegExp);
+			expect(state.current.source).toBe(testRegex.source);
+			expect(state.current.flags).toBe(testRegex.flags);
+		});
+
+		it('should store and retrieve Uint8Array natively', async () => {
+			// Note: Using Uint8Array instead of ArrayBuffer for better cross-environment compatibility
+			const data = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+
+			await setItem('bufferKey', data);
+
+			const state = persistedStateAsync<Uint8Array>('bufferKey', new Uint8Array(0));
+
+			await state.ready;
+
+			// Use constructor name check for cross-realm compatibility in test environment
+			expect(state.current.constructor.name).toBe('Uint8Array');
+			expect(state.current.length).toBe(8);
+			expect(Array.from(state.current)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+		});
+
+		it('should store complex nested objects with native types', async () => {
+			interface ComplexState {
+				name: string;
+				createdAt: Date;
+				tags: Set<string>;
+				metadata: Map<string, number | boolean>;
+			}
+
+			const testState: ComplexState = {
+				name: 'Test',
+				createdAt: new Date('2024-03-15'),
+				tags: new Set(['svelte', 'typescript']),
+				metadata: new Map<string, number | boolean>([
+					['version', 1],
+					['active', true]
+				])
+			};
+
+			await setItem('complexKey', testState);
+
+			const state = persistedStateAsync<ComplexState>('complexKey', {
+				name: '',
+				createdAt: new Date(0),
+				tags: new Set(),
+				metadata: new Map()
+			});
+
+			await state.ready;
+
+			expect(state.current.name).toBe('Test');
+			expect(state.current.createdAt).toBeInstanceOf(Date);
+			expect(state.current.createdAt.getTime()).toBe(new Date('2024-03-15').getTime());
+			expect(state.current.tags).toBeInstanceOf(Set);
+			expect(state.current.tags.has('svelte')).toBe(true);
+			expect(state.current.metadata).toBeInstanceOf(Map);
+			expect(state.current.metadata.get('version')).toBe(1);
+		});
+
+		it('should sync native types across tabs via BroadcastChannel', async () => {
+			const state1 = persistedStateAsync<Date>('syncDateKey', new Date(0), {
+				syncTabs: true
+			});
+
+			const state2 = persistedStateAsync<Date>('syncDateKey', new Date(0), {
+				syncTabs: true
+			});
+
+			await state1.ready;
+			await state2.ready;
+
+			const newDate = new Date('2024-12-25T00:00:00.000Z');
+			state1.current = newDate;
+			await waitForNextTick();
+			await waitForHydration();
+
+			expect(state2.current).toBeInstanceOf(Date);
+			expect(state2.current.getTime()).toBe(newDate.getTime());
 		});
 	});
 });

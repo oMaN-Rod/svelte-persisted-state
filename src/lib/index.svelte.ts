@@ -215,7 +215,7 @@ export function persistedStateAsync<T>(
 ): AsyncPersistedState<T> {
 	const {
 		indexedDB: indexedDBOptions = {},
-		serializer = JSON,
+		serializer,
 		syncTabs = true,
 		onWriteError = console.error,
 		onParseError = console.error,
@@ -248,11 +248,11 @@ export function persistedStateAsync<T>(
 		}
 
 		try {
-			const storedValue = await idbGetItem<string>(key, indexedDBOptions);
+			const storedValue = await idbGetItem<T>(key, indexedDBOptions);
 			if (storedValue !== null) {
 				try {
-					const parsed = serializer.parse(storedValue);
-					state = beforeRead(parsed);
+					const value = serializer ? serializer.parse(storedValue as string) : storedValue;
+					state = beforeRead(value);
 				} catch (error) {
 					onParseError(error);
 					state = initialValue;
@@ -276,8 +276,8 @@ export function persistedStateAsync<T>(
 			if (event.data.key === key) {
 				try {
 					skipNextWrite = true;
-					const parsed = serializer.parse(event.data.value);
-					state = beforeRead(parsed);
+					const value = serializer ? serializer.parse(event.data.value) : event.data.value;
+					state = beforeRead(value);
 				} catch (error) {
 					skipNextWrite = false;
 					onParseError(error);
@@ -292,10 +292,11 @@ export function persistedStateAsync<T>(
 		let isFirstRun = true;
 
 		$effect(() => {
-			let serialized: string;
+			const snapshot = $state.snapshot(state) as T;
+			let valueToStore: T | string;
 			try {
-				const valueToStore = beforeWrite(state);
-				serialized = serializer.stringify(valueToStore);
+				const transformed = beforeWrite(snapshot);
+				valueToStore = serializer ? serializer.stringify(transformed) : transformed;
 			} catch (error) {
 				onWriteError(error);
 				return;
@@ -306,10 +307,10 @@ export function persistedStateAsync<T>(
 				return;
 			}
 			if (!isLoading && !skipNextWrite) {
-				idbSetItem(key, serialized, indexedDBOptions)
+				idbSetItem(key, valueToStore, indexedDBOptions)
 					.then(() => {
 						if (syncTabs && broadcastChannel) {
-							broadcastChannel.postMessage({ key, value: serialized });
+							broadcastChannel.postMessage({ key, value: valueToStore });
 						}
 					})
 					.catch(onWriteError);
