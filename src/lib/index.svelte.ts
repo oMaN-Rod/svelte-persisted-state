@@ -152,11 +152,16 @@ export function persistedState<T>(key: string, initialValue: T, options: Options
 	}
 
 	let state = $state(storedValue);
+	let lastSerialized: string | null = storageArea?.getItem(key) ?? null;
 
 	function updateStorage(value: T) {
 		try {
 			const valueToStore = beforeWrite(value);
-			storageArea?.setItem(key, serializer.stringify(valueToStore));
+			const serialized = serializer.stringify(valueToStore);
+			if (serialized !== lastSerialized) {
+				storageArea?.setItem(key, serialized);
+				lastSerialized = serialized;
+			}
 		} catch (error) {
 			onWriteError(error);
 		}
