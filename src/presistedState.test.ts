@@ -241,6 +241,42 @@ describe('persistedState', () => {
 		expect(JSON.parse(raw!)).toBe('cookieInitial');
 	});
 
+	it('should not rewrite cookie when value has not changed', async () => {
+		document.cookie = `cookieKey=${encodeURIComponent('"existingValue"')};path=/`;
+		const setCookieSpy = vi.spyOn(document, 'cookie', 'set');
+
+		persistedState<string>('cookieKey', 'default', { storage: 'cookie' });
+		await waitForNextTick();
+
+		expect(setCookieSpy).not.toHaveBeenCalled();
+		setCookieSpy.mockRestore();
+	});
+
+	it('should write cookie when value actually changes', async () => {
+		document.cookie = `cookieKey=${encodeURIComponent('"existingValue"')};path=/`;
+		const setCookieSpy = vi.spyOn(document, 'cookie', 'set');
+
+		const state = persistedState<string>('cookieKey', 'default', { storage: 'cookie' });
+		state.current = 'newValue';
+		await waitForNextTick();
+
+		expect(setCookieSpy).toHaveBeenCalled();
+		const raw = getCookieValue('cookieKey');
+		expect(JSON.parse(raw!)).toBe('newValue');
+		setCookieSpy.mockRestore();
+	});
+
+	it('should not rewrite localStorage when value has not changed', async () => {
+		localStorage.setItem('testKey', '"existingValue"');
+		const setItemSpy = vi.spyOn(Object.getPrototypeOf(window.localStorage), 'setItem');
+
+		persistedState<string>('testKey', 'default');
+		await waitForNextTick();
+
+		expect(setItemSpy).not.toHaveBeenCalled();
+		setItemSpy.mockRestore();
+	});
+
 	it('should not sync across tabs for cookies even if syncTabs is true', async () => {
 		const state = persistedState<string>('cookieKey', 'cookieInitial', {
 			storage: 'cookie',
